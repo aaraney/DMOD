@@ -847,6 +847,23 @@ class NGENRequest(ModelExecRequest):
     """(:class:`str`) The name of the model to be used"""
 
     @classmethod
+    def _additional_deserialized_args(cls, json_obj: dict) -> dict:
+        """
+        Parse any additional, (sub)class-specific deserialization params.
+        
+        For the base type, any empty dict is returned.
+        
+        Parameters
+        ----------
+        json_obj
+
+        Returns
+        -------
+        dict
+        """
+        return dict()
+
+    @classmethod
     def factory_init_from_deserialized_json(cls, json_obj: dict) -> Optional['NGENRequest']:
         """
         Deserialize request formated as JSON to an instance.
@@ -877,13 +894,18 @@ class NGENRequest(ModelExecRequest):
             if 'partition_config_data_id' in json_obj['model']:
                 optional_kwargs_w_defaults['partition_config_data_id'] = json_obj['model']['partition_config_data_id']
 
+            additional_kw_args = cls._additional_deserialized_args(json_obj)
+            
+            for key, val in optional_kwargs_w_defaults.items():
+                additional_kw_args[key] = val
+
             return cls(time_range=TimeRange.factory_init_from_deserialized_json(json_obj['model']['time_range']),
                        hydrofabric_uid=json_obj['model']['hydrofabric_uid'],
                        hydrofabric_data_id=json_obj['model']['hydrofabric_data_id'],
                        config_data_id=json_obj['model']['config_data_id'],
                        bmi_cfg_data_id=json_obj['model']['bmi_config_data_id'],
                        session_secret=json_obj['session-secret'],
-                       **optional_kwargs_w_defaults)
+                       **additional_kw_args)
         except Exception as e:
             return None
 
