@@ -386,6 +386,7 @@ class Launcher(SimpleDockerUtil):
 
         # TODO (later): have something more intelligent than class type to determine right entrypoint format and
         #  values, but for now assume/require a "standard" image
+        # NOTE: aaraney: will need to change this
         if not (isinstance(job.model_request, NWMRequest) or isinstance(job.model_request, NGENRequest)):
             raise RuntimeError("Unexpected request type {}: cannot build Docker CMD arg list".format(
                 job.model_request.__class__.__name__))
@@ -424,6 +425,43 @@ class Launcher(SimpleDockerUtil):
 
             # Also do a sanity check here to ensure there is at least one forcing dataset
             self._ds_names_helper(job, worker_index, DataCategory.FORCING)
+
+        if isinstance(job.model_request, NGENCalibrationRequest):
+            # $4 is the worker index (where index 0 is assumed to be the lead node)
+            docker_cmd_args.append(str(worker_index))
+
+            # $5 is the name of the output dataset (which will imply a directory location)
+            output_dataset_names = self._ds_names_helper(job, worker_index, DataCategory.OUTPUT, max_count=1,
+                                                         data_format=DataFormat.NGEN_CAL_OUTPUT)
+            docker_cmd_args.append(output_dataset_names[0])
+
+            # $6 is the name of the hydrofabric dataset (which will imply a directory location)
+            hydrofabric_dataset_names = self._ds_names_helper(job, worker_index, DataCategory.HYDROFABRIC, max_count=1)
+            docker_cmd_args.append(hydrofabric_dataset_names[0])
+
+            # $7 is the name of the realization configuration dataset (which will imply a directory location)
+            realization_cfg_dataset_names = self._ds_names_helper(job, worker_index, DataCategory.CONFIG, max_count=1,
+                                                                  data_format=DataFormat.NGEN_REALIZATION_CONFIG)
+            docker_cmd_args.append(realization_cfg_dataset_names[0])
+
+            # $8 is the name of the BMI config dataset (which will imply a directory location)
+            bmi_config_dataset_names = self._ds_names_helper(job, worker_index, DataCategory.CONFIG, max_count=1,
+                                                             data_format=DataFormat.BMI_CONFIG)
+            docker_cmd_args.append(bmi_config_dataset_names[0])
+
+            # $9 is the name of the partition config dataset (which will imply a directory location)
+            partition_config_dataset_names = self._ds_names_helper(job, worker_index, DataCategory.CONFIG, max_count=1,
+                                                                   data_format=DataFormat.NGEN_PARTITION_CONFIG)
+            docker_cmd_args.append(partition_config_dataset_names[0])
+
+            # $10 is the name of the calibration config dataset (which will imply a directory location)
+            calibration_config_dataset_names = self._ds_names_helper(job, worker_index, DataCategory.CONFIG, max_count=1,
+                                                                data_format=DataFormat.NGEN_CAL_CONFIG)
+            docker_cmd_args.append(calibration_config_dataset_names[0])
+
+            # Also do a sanity check here to ensure there is at least one forcing dataset
+            self._ds_names_helper(job, worker_index, DataCategory.FORCING)
+
 
         return docker_cmd_args
 
