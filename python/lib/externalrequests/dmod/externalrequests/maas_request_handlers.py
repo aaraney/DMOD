@@ -332,5 +332,5 @@ class DatasetRequestHandler(MaaSRequestHandler):
     @property
     def service_client(self) -> DataServiceClient:
         if self._service_client is None:
-            self._service_client = DataServiceClient(self.service_url, self.service_ssl_dir)
+            self._service_client = DataServiceClient(self.service_ssl_dir, self.service_url)
         return self._service_client
