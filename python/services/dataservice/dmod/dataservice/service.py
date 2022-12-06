@@ -99,7 +99,7 @@ class DockerS3FSPluginHelper(SimpleDockerUtil):
 
         secrets = [self.get_secret_reference(sn) for sn in self._obj_store_docker_secret_names]
 
-        docker_cmd_args = ['--sentinel', self.sentinel_file, '--service-mode']
+        docker_cmd_args = ['--sentinel', Path(self.sentinel_file).name , '--service-mode']
         docker_cmd_args.extend(worker_required_datasets)
 
         env_vars = ['PLUGIN_ALIAS={}'.format(self._docker_plugin_alias)]
