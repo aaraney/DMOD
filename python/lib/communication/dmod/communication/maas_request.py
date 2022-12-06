@@ -16,13 +16,17 @@ def get_available_models() -> dict:
     """
     :return: The names of all models mapped to their class
     """
-    available_models = dict()
+    def recursively_get_all_model_subclasses(model_exec_request: "ModelExecRequest") -> dict:
+        available_models = dict()
 
-    for subclass in ModelExecRequest.__subclasses__():  # type: ModelExecRequest
-        available_models[subclass.model_name] = subclass
+        for subclass in model_exec_request.__subclasses__():  # type: ModelExecRequest
+            available_models[subclass.model_name] = subclass
+            # TODO: what to do if descendant subclass "overwrites" ancestor subclass?
+            available_models.update(recursively_get_all_model_subclasses(subclass))
 
-    return available_models
+        return available_models
 
+    return recursively_get_all_model_subclasses(ModelExecRequest)
 
 def get_available_outputs() -> set:
     """
