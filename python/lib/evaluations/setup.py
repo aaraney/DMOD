@@ -19,6 +19,7 @@ setup(
     license='',
     install_requires=[
         'dmod-metrics',
+        'deprecated',
         'pandas',
         'xarray',
         'h5py',
