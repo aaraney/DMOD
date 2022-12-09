@@ -1,3 +1,13 @@
+// global
+var startup_scripts = [];
+var crosswalk = {};
+let control_layers = {};
+let active_control_layers = [];
+let metrics = [];
+var map_controls;
+var layer;
+
+
 function getDateFormatter() {
     var channel = $("#channel-name").text();
     var formatterOptions = {
@@ -181,6 +191,107 @@ function registerEvent(eventName, handler, callCount) {
     else {
         eventHandlers[eventName] = [registration];
     }
+}
+
+function updateCrosswalk(event, msg) {
+/*
+msg will look like:
+{
+    "event": "crosswalk",
+    "type": "send_message",
+    "time": "2022-12-08 02:20:39 PM CST",
+    "data": {
+        "prediction_location": {
+            "0": "cat-67",
+            "1": "cat-27",
+            "2": "cat-52"
+        },
+        "observation_location": {
+            "0": "02146562",
+            "1": "0214655255",
+            "2": "0214657975"
+        }
+    }
+}
+*/
+    const { data: {prediction_location, observation_location}} = msg
+    for (var location_index in prediction_location) {
+        const predictedLocation = prediction_location[location_index];
+        const observedLocation = observation_location[location_index];
+        crosswalk[predictedLocation] = observedLocation;
+    }
+}
+
+function updateMapMetrics(event, msg){
+    /* msg will look like:
+    {
+        "event": "metric",
+        "type": "send_message",
+        "time": "2022-12-09 08:33:42 AM CST",
+        "data": {
+            "metric": "Pearson Correlation Coefficient",
+            "description": "A measure of linear correlation between two sets of data",
+            "weight": 18,
+            "total": 36.99786170539468,
+            "scores": {
+                "total": 36.99786170539468,
+                "grade": "1.00%",
+                "scores": {
+                    "p50_va": {
+                        "value": 0.6851455871369385,
+                        "scaled_value": 12.332620568464893,
+                        "sample_size": 697,
+                        "failed": false,
+                        "weight": 1
+                    },
+                    "p75_va": {
+                        "value": 0.6851455871369385,
+                        "scaled_value": 12.332620568464893,
+                        "sample_size": 697,
+                        "failed": false,
+                        "weight": 10
+                    },
+                    "p80_va": {
+                        "value": 0.6851455871369385,
+                        "scaled_value": 12.332620568464893,
+                        "sample_size": 697,
+                        "failed": false,
+                        "weight": 5
+                    }
+                }
+            },
+            "metadata": {
+                "observed_location": "0214657975",
+                "predicted_location": "cat-52"
+            }
+        }
+    }
+    */
+
+    const { data: {metric}} = msg;
+
+    // add map control for each metric type
+    if (!Object.hasOwn(control_layers, metric)){
+        const layer_stub = L.layerGroup([]);
+        control_layers[metric] = layer_stub;
+        if (map_controls !== undefined){
+            map_controls.remove()
+        }
+
+        map_controls = L.control.layers({}, control_layers).addTo(visualizationMap);
+    }
+    metrics.push(msg)
+}
+
+function addMapHandlers() {
+    registerEvent(
+        "crosswalk",
+        updateCrosswalk
+    );
+    registerEvent(
+        "metric",
+        updateMapMetrics
+    );
 }
 
 function connectToSocket(event) {
@@ -537,6 +648,158 @@ function loadPreexistingDefinition(event, responseData) {
     switchTabs(null, "edit-div");
 }
 
+
+
+function getServerData(serverUrl) {
+    var data = [];
+
+    $.ajax(
+        {
+            url: serverUrl,
+            type: 'GET',
+            async: false,
+            error: function(xhr,status,error) {
+                console.error(error);
+            },
+            success: function(result,status,xhr) {
+                data.push(result);
+            }
+        }
+    );
+
+    if (data.length == 0) {
+        return null;
+    }
+
+    return data[0];
+}
+
+function layerCreation(geoJsonPoint, latlng) {
+    var colorIndex = 0;
+
+    return L.circleMarker(latlng);
+}
+
+function plotMapLayers(featureDocuments, map) {
+    var layers = [];
+
+    var addTooltip = function(feature, layer) {
+        if ("id" in feature) {
+            layer.bindTooltip(feature["id"]);
+        }
+        else if ("properties" in feature && "Name" in feature["properties"]) {
+            layer.bindTooltip(feature['properties']['Name']);
+        }
+    }
+
+    var buildProperties = function(feature, layer) {
+        layer.bindPopup(propertiesToHTML(feature, crosswalk), {"maxWidth": 2000})
+        addTooltip(feature, layer);
+    };
+
+    var addFeature = function(featureDocument) {
+        var layer = L.geoJSON(
+            featureDocument.features,
+            {
+                onEachFeature: buildProperties,
+                style: function() {return layerStyle;},
+                pointToLayer: layerCreation
+            }
+        ).addTo(map);
+        layers.push(layer);
+    }
+
+    featureDocuments.forEach(featureDocument => addFeature(featureDocument));
+    return layers;
+}
+
+function propertiesToHTML(geojson, xwalk) {
+    var properties = geojson.properties;
+    var markup = "";
+    if ("Name" in properties) {
+        markup += "<h3>" + properties.Name + "</h3>";
+    }
+    else if ("id" in geojson) {
+        markup += "<h3>" + geojson.id + "</h3>";
+    }
+
+    if (geojson.id in xwalk) {
+        var cross_walk = xwalk[geojson.id];
+        if ("COMID" in cross_walk) {
+            var comids = cross_walk['COMID'];
+            markup += "<h4>COMID</h4>";
+            markup += "<ul>";
+            for (comid of comids) {
+                markup += "<li>" + comid + "</li>";
+            }
+            markup += "</ul>";
+        }
+    }
+
+    markup += "<table style='border-spacing: 8px'>";
+
+    var propertyKeys = [];
+
+    for (const property in properties) {
+        var propertyIsNotName = property.toLowerCase() != "name";
+        var propertyIsNotBlank = properties[property] != null && properties[property] != "";
+        var propertyIsNotAnObject = typeof properties[property] != 'object';
+        if (propertyIsNotName && propertyIsNotBlank && propertyIsNotAnObject) {
+            propertyKeys.push(property);
+        }
+    }
+
+    var columnCount = Math.ceil(propertyKeys.length / maxRows);
+    var rowCount = Math.min(propertyKeys.length, maxRows);
+
+    for(rowIndex = 0; rowIndex < rowCount; rowIndex++) {
+        if (rowIndex % 2 == 0) {
+            markup += "<tr class='even-feature-property-row'>";
+        }
+        else {
+            markup += "<tr class='odd-feature-property-row'>";
+        }
+
+        for (columnIndex = 0; columnIndex < columnCount; columnIndex++) {
+            var keyIndex = rowIndex * columnCount + columnIndex;
+
+            if (keyIndex < propertyKeys.length) {
+                var key = propertyKeys[keyIndex];
+
+                markup += "<td id='feature-property-key'><b>" + key + ":</b></td>";
+                markup += "<td id='feature-property-value'>" + properties[key] + "</td>";
+            }
+        }
+
+        markup += "</tr>";
+    }
+
+    markup += "</table>";
+    return markup;
+}
+
+function getSelectedShapeStyle(feature) {
+    var featureExists = feature != null && typeof feature != 'undefined';
+    var featureType = feature.geometry.type.toLowerCase();
+
+    if (featureExists && featureType.includes("linestring")) {
+        return selectedLineStyle;
+    }
+
+    return selectedShapeStyle;
+}
+
+function getShapeStyle(feature) {
+    var featureExists = feature != null && typeof feature != 'undefined';
+    var featureType = feature.geometry.type.toLowerCase();
+
+    if (featureExists && featureType.includes("linestring")) {
+        return lineStyle;
+    }
+
+    return layerStyle;
+}
+
 function initializeFields() {
     var editorView = getCodeView("editor");
 
@@ -562,6 +825,129 @@ function initializeFields() {
         "change",
         (event) => {
             sessionStorage.setItem("author", $("#author").val());
+        }
+    );
+}
+
+async function loadMapData(){
+    const res = await fetch("/static/fabric/catchment_data.geojson");
+    const data = await res.json();
+
+    layer = L.geoJSON(data);
+
+    const zoomLevel = visualizationMap.getZoom();
+    visualizationMap.fitBounds(layer.getBounds());
+    visualizationMap.setZoom(zoomLevel);
+}
+
+function extract_metric_fields(data){
+    const location = data.metadata.predicted_location
+    const observed_location = data.metadata.observed_location
+    const metric = data.metric
+    const aggregated_value = data.total
+    const grade = data.scores.grade
+    const threshold_values = Object.entries(data.scores.scores).map(([key, value]) => ({threshold: key, value: value.value}))
+    return {location, metric, grade, value: aggregated_value, threshold_values, observed_location}
+}
+
+function groupby_metric(data){
+    return data.filter(item => item.event == "metric")
+                            .map(({data}) => extract_metric_fields(data))
+                            .reduce((grouped_by_metric, item) => ({
+                                ...grouped_by_metric,
+                                [item.metric]: [...(grouped_by_metric[item.metric] || []), item]
+                            }), {});
+}
+
+// build map of {location-id: popup text} for a list of selected metrics
+function build_popup_map(selected_metrics, grouped_metrics){
+    return selected_metrics.reduce((ids, metric) => {
+        const records = grouped_metrics[metric]
+        const reduced = records.reduce((metric_records, record) => {
+            let current_text = "";
+            let location_text = `Prediction Location: ${record.location}<br>`
+            let observed_location_text = `Observation Location: ${record.observed_location}<br>`
+
+            // check if metrics already added for location
+            if (Object.hasOwn(ids, record.location)){
+                current_text = `${ids[record.location]}<br>`
+                location_text = ""
+                observed_location_text= ""
+            }
+
+            const popup_text = `${location_text}${observed_location_text}${current_text}Metric: ${record.metric}<br>Grade: ${record.grade}`
+            return {...metric_records, [record.location]: popup_text}
+        }, {})
+
+
+        return {...ids, ...reduced}
+    }, {})
+}
+
+function update_popups(map, layer_group, popup_map){
+    layer_group.eachLayer(l => {
+        const feature_id = l.feature.id
+
+        if (!Object.hasOwn(popup_map, feature_id)){
+            // remove any existing pops on layer
+            l.unbindPopup()
+            l.remove()
+            return
+        }
+
+        l.bindPopup(popup_map[feature_id])
+        l.addTo(map)
+    })
+}
+
+function loadGeometry(name) {
+    var crosswalk = getServerData("crosswalk/"+name);
+
+    var addTooltip = function(feature, layer) {
+        if ("id" in feature) {
+            layer.bindTooltip(feature["id"]);
+        }
+        else if ("properties" in feature && "Name" in feature["properties"]) {
+            layer.bindTooltip(feature['properties']['Name']);
+        }
+    }
+
+    var buildProperties = function(feature, layer) {
+        layer.bindPopup(propertiesToHTML(feature, crosswalk), {"maxWidth": 2000})
+        addTooltip(feature, layer);
+    };
+
+    var addDocument = function(document) {
+        var layer = L.geoJSON(
+            document,
+            {
+                onEachFeature: buildProperties,
+                style: getShapeStyle,
+                pointToLayer: layerCreation
+            }
+        ).addTo(visualizationMap);
+
+        // visualizationMap.fitBounds(layer.getBounds());
+    }
+
+    addDocument(crosswalk)
+
+    var url = "fabric/" + name;
+    $.ajax(
+        {
+            url: url,
+            type: "GET",
+            data: {
+                "fabric": name
+            },
+            error: function(xhr, status, error) {
+                console.error(error);
+            },
+            success: function(result, status, xhr) {
+                if (result) {
+                    addDocument(result);
+                }
+            }
         }
     );
 }
@@ -598,4 +984,5 @@ $(function(){
     );
 
     closePopups(null);
+    startup_scripts.forEach(script => script());
 });

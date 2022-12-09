@@ -5,22 +5,31 @@
 {% block scripts %}
 <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.5/codemirror.min.css"
-      crossorigin="anonymous" referrerpolicy="no-referrer" />
-<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.5/codemirror.min.js"
-        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    crossorigin="anonymous" referrerpolicy="no-referrer" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.5/codemirror.min.js" crossorigin="anonymous"
+    referrerpolicy="no-referrer"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.5/mode/javascript/javascript.min.js"
-        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.6/addon/edit/matchbrackets.min.js"
-        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.6/addon/edit/closebrackets.min.js"
-        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.6/addon/fold/foldcode.min.js"
-        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.6/addon/fold/brace-fold.min.js"
-        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.6/addon/fold/foldgutter.min.js"
-        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <script src="{% static 'evaluation_service/js/ready_evaluation_async.js' %}"></script>
+{% if show_map %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.3/dist/leaflet.css" integrity="sha256-kLaT2GOSpHechhsozzB+flnD+zUyjE2LlfWPgU04xyI=" crossorigin="" />
+<style>
+    #map {
+        width: 100%;
+        height: 100%;
+    }
+</style>
+{% endif %}
 <script>
     let socket = null;
     let previousState = {};
@@ -95,199 +104,306 @@
 </script>
 {% endblock scripts %}
 {% block style %}
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.6/addon/fold/foldgutter.min.css"
-          crossorigin="anonymous" referrerpolicy="no-referrer" />
-    <link rel="stylesheet" type="text/css" href="{% static 'evaluation_service/css/ready_evaluation_async.css' %}">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.6/addon/fold/foldgutter.min.css"
+    crossorigin="anonymous" referrerpolicy="no-referrer" />
+<link rel="stylesheet" type="text/css" href="{% static 'evaluation_service/css/ready_evaluation_async.css' %}">
 {% endblock style %}
 {% block bannercontent %}
-    <h1>Setup</h1>
+<h1>Setup</h1>
 {% endblock bannercontent %}
 {% block content %}
-    <div id="content" class="pane">
-        <div id="launch-warning">
-            <p>
-                This page is for testing the evaluation service - use in production should be initiated directly via the
-                API, not here
+<div id="content" class="pane">
+    <div id="launch-warning">
+        <p>
+            This page is for testing the evaluation service - use in production should be initiated directly via the
+            API, not here
+        </p>
+    </div>
+    <div id="general-error-box" class="error-box">
+        <p id="error-message"></p>
+        <img id="acknowledge-error-icon" src="{% static 'evaluation_service/img/error.png' %}"
+            alt="I am aware of this error" onclick="updateError(null)">
+    </div>
+    <div id="tabs">
+        <button id="instruction-tab-button" class="tablinks"
+            onclick="switchTabs(event, 'edit-div')">Instructions</button>
+        <button id="messages-tab-button" class="tablinks" onclick="switchTabs(event, 'message-div')">Messages</button>
+        {% if show_map %}
+                <button id="visualization-tab-button" class="tablinks" onclick="(() => {switchTabs(event, 'visualization-div'); visualizationMap.invalidateSize()})()">
+                    Visualization
+                </button>
+            {% endif %}
+    </div>
+    <div id="edit-div" class="tab">
+        <div id="editor-header" class="tab-header">
+            <label for="evaluation_id">Evaluation ID:</label>
+            <input id="evaluation_id" name="evaluation_id" type="text" maxlength="100" minlength="10"
+                pattern="{{ evaluation_id_pattern }}" style="width: 400px; margin-left: 10px;"
+                onchange="syncNameChange(event)" value="{{ generated_evaluation_id }}" required>
+            <button id="search-button" onclick="showSearchPopup(event)">Search</button>
+        </div>
+        <div id="editor-content" class="tab-content codeview-container">
+            <textarea id="instructions" name="instructions" required>{{ evaluation_template }}</textarea>
+        </div>
+        <div id="editor-footer" class="tab-footer">
+            <button id="evaluation-submit">Start Evaluation</button>
+            <button id="evaluation-save" onclick="showPopup(event, 'save-dialog')">Save</button>
+        </div>
+    </div>
+    <div id="message-div" class="tab">
+        <div id="message-header" class="tab-header">
+            <h3>Responses</h3>
+        </div>
+        <div id="message-content" class="tab-content">
+            <p id="message-details">
+                <span>Message Count: <span id="message-count" class="session-details">0</span></span>
+                <br>
+                <span>Last Updated: <span id="last-updated" class="session-details"></span></span>
+                <br>
+                <label for="record-messages">Record Messages</label>
+                <input type="checkbox" id="record-messages" checked>
             </p>
-        </div>
-        <div id="general-error-box" class="error-box">
-            <p id="error-message"></p>
-            <img id="acknowledge-error-icon" src="{% static 'evaluation_service/img/error.png' %}"
-                 alt="I am aware of this error" onclick="updateError(null)">
-        </div>
-        <div id="tabs">
-            <button id="instruction-tab-button" class="tablinks" onclick="switchTabs(event, 'edit-div')">Instructions</button>
-            <button id="messages-tab-button" class="tablinks" onclick="switchTabs(event, 'message-div')">Messages</button>
-        </div>
-        <div id="edit-div" class="tab">
-            <div id="editor-header" class="tab-header">
-                <label for="evaluation_id">Evaluation ID:</label>
-                <input id="evaluation_id" name="evaluation_id" type="text" maxlength="100"
-                       minlength="10" pattern="{{ evaluation_id_pattern }}" style="width: 400px; margin-left: 10px;"
-                       onchange="syncNameChange(event)"
-                       value="{{ generated_evaluation_id }}" required>
-                <button id="search-button" onclick="showSearchPopup(event)">Search</button>
-            </div>
-            <div id="editor-content" class="tab-content codeview-container">
-                <textarea id="instructions" name="instructions" required>{{ evaluation_template }}</textarea>
-            </div>
-            <div id="editor-footer" class="tab-footer">
-                <button id="evaluation-submit">Start Evaluation</button>
-                <button id="evaluation-save" onclick="showPopup(event, 'save-dialog')">Save</button>
+            <div id="message-area" class="codeview-container">
+                <textarea id="messages"></textarea>
             </div>
         </div>
-        <div id="message-div" class="tab">
-            <div id="message-header" class="tab-header">
-                <h3>Responses</h3>
-            </div>
-            <div id="message-content" class="tab-content">
-                <p id="message-details">
-                    <span>Message Count: <span id="message-count" class="session-details">0</span></span>
-                    <br>
-                    <span>Last Updated: <span id="last-updated" class="session-details"></span></span>
-                    <br>
-                    <label for="record-messages">Record Messages</label>
-                    <input type="checkbox" id="record-messages" checked>
-                </p>
-                <div id="message-area" class="codeview-container">
-                    <textarea id="messages"></textarea>
-                </div>
-            </div>
-            <div id="message-footer" class="tab-footer">
-                <button id="clear-button">Clear Output</button>
-                <button id="clear-digest">Clear Digest</button>
-                <button id="get-digest" onclick="showDigestPopup(event)">Get Digest</button>
-            </div>
+        <div id="message-footer" class="tab-footer">
+            <button id="clear-button">Clear Output</button>
+            <button id="clear-digest">Clear Digest</button>
+            <button id="get-digest" onclick="showDigestPopup(event)">Get Digest</button>
         </div>
-        <div id="page-modal">
-            <div id="save-dialog" class="popup">
-                <div id="save-header" class="popup-header">
-                    <b>Save Evaluation Definition</b>
-                </div>
-                <div class="popup-contents">
-                    <div id="save-errors" class="error-box">
-                        <p id="save-error-message"></p>
-                    </div>
-                    <div id="save-fields" class="popup-fields" style="display: grid">
-                        <label for="author" style="grid-column: 1; grid-row: 1">Author:</label>
-                        <input type="text" placeholder="Your name..." style="grid-column: 2; grid-row: 1"
-                               id="author" minlength="10" maxlength="255" required>
-                        <br>
+    </div>
+    {% if show_map %}
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"
+        integrity="sha512-XQoYMqMTK8LvdxXYG3nZ448hOEQiglfqkJs1NOQV44cWnUrBc8PkAOcXy20w0vlaXaVUearIOBhiXZ5V3ynxwA=="
+        crossorigin=""></script>
+    <script>
+        {% if center %}
+        var centerLine = [{{ center.0 }}, { { center.1 } }];
+        console.log("Using passed center line");
+        {% else %}
+        var centerLine = [37.0902, -95.7129];
+        {% endif %}
 
-                        <label for="evaluation_name" style="grid-column: 1; grid-row: 2">Configuration Name:</label>
-                        <input name="evaluation_name" style="grid-column: 2; grid-row: 2" id="evaluation_name"
-                               type="text" minlength="5" maxlength="255" required
-                               value="{{ generated_evaluation_id }}">
-                        <br>
-                        <label for="description" style="grid-column: 1; grid-row: 3">Description:</label><br>
-                        <textarea id="description" style="grid-column: 1 / span 2; grid-row: 4; resize: none"
-                                  cols="80" rows="10"
-                                  placeholder="Enter a description for what your evaluation intends to measure">
+        var zoom = {{ zoom|default:6 }};
+
+        // var mapUrl = "{{ mapUrl|default:"https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" }}";
+        var mapUrl = "{{ mapUrl|default:"https://tile.openstreetmap.org/{z}/{x}/{y}.png" }}";
+
+            {% if attribution %}
+        var attribution = "{{ attribution }}";
+        {% else %}
+        var attribution = 'Map data &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>';
+        {% endif %}
+
+        var maxZoom = {{ max_zoom|default:18 }};
+
+        {% autoescape on %}
+        {% for layerUrl in layerUrls %}
+        layerUrls.push("{{ layerUrl }}");
+        {% endfor %}
+        {% endautoescape %}
+
+        {% if layerStyle %}
+        {% for style_name, value in layerStyle.items %}
+        startup_scripts.push(
+            function () {
+                layerStyle[style_name] = value;
+            }
+        );
+        {% endfor %}
+        {% endif %}
+
+        {% if lineStyle %}
+        {% for style_name, value in lineStyle.items %}
+        startup_scripts.push(
+            function () {
+                lineStyle[style_name] = value;
+            }
+        );
+        {% endfor %}
+        {% endif %}
+
+        let geometryName = "{{ geometry_name }}";
+        let visualizationMap = null;
+
+        startup_scripts.push(
+            function () {
+                // visualizationMap = L.map('visualization-content').setView(centerLine, zoom);
+                visualizationMap = L.map('map').setView(centerLine, zoom);
+
+                L.tileLayer(mapUrl, {
+                    maxZoom: maxZoom,
+                    attribution: attribution,
+                    // tileSize: 512,
+                    // zoomOffset: -1
+                }).addTo(visualizationMap);
+
+                loadMapData()
+            }
+        );
+
+        startup_scripts.push(function(){
+            addMapHandlers()
+            // listen for layer control checked
+            visualizationMap.on("overlayadd", e => {
+                active_control_layers.push(e.name)
+
+                const grouped_by_metric = groupby_metric(metrics)
+
+                const popup_text_map = build_popup_map(active_control_layers, grouped_by_metric)
+                update_popups(visualizationMap, layer, popup_text_map)
+                }
+            )
+
+            // listen for layer control unchecked
+            visualizationMap.on("overlayremove", e => {
+                const control_index_to_remove = active_control_layers.indexOf(e.name)
+                // remove control name inplace
+                active_control_layers.splice(control_index_to_remove, 1)
+                const grouped_by_metric = groupby_metric(metrics)
+
+                const popup_text_map = build_popup_map(active_control_layers, grouped_by_metric)
+                update_popups(visualizationMap, layer, popup_text_map)
+            })
+        });
+    </script>
+    <div id="visualization-div" class="tab">
+        <div id="visualization-header" class="tab-header">
+            <h3>Results</h3>
+        </div>
+        <div id="visualization-content" class="tab-content">
+            <div id="map"></div>
+        </div>
+        <div id="visualization-footer" class="tab-footer"></div>
+    {% endif %}
+    <div id="page-modal">
+        <div id="save-dialog" class="popup">
+            <div id="save-header" class="popup-header">
+                <b>Save Evaluation Definition</b>
+            </div>
+            <div class="popup-contents">
+                <div id="save-errors" class="error-box">
+                    <p id="save-error-message"></p>
+                </div>
+                <div id="save-fields" class="popup-fields" style="display: grid">
+                    <label for="author" style="grid-column: 1; grid-row: 1">Author:</label>
+                    <input type="text" placeholder="Your name..." style="grid-column: 2; grid-row: 1" id="author"
+                        minlength="10" maxlength="255" required>
+                    <br>
+
+                    <label for="evaluation_name" style="grid-column: 1; grid-row: 2">Configuration Name:</label>
+                    <input name="evaluation_name" style="grid-column: 2; grid-row: 2" id="evaluation_name" type="text"
+                        minlength="5" maxlength="255" required value="{{ generated_evaluation_id }}">
+                    <br>
+                    <label for="description" style="grid-column: 1; grid-row: 3">Description:</label><br>
+                    <textarea id="description" style="grid-column: 1 / span 2; grid-row: 4; resize: none" cols="80"
+                        rows="10" placeholder="Enter a description for what your evaluation intends to measure">
 
                         </textarea>
-                    </div>
-                    <div id="save-actions" class="popup-actions">
-                        <button id="save-definition" onclick="saveDefinition(event)">Save</button>
-                        <button id="close-save-popup-button" onclick="closePopups(event)">Close</button>
-                    </div>
+                </div>
+                <div id="save-actions" class="popup-actions">
+                    <button id="save-definition" onclick="saveDefinition(event)">Save</button>
+                    <button id="close-save-popup-button" onclick="closePopups(event)">Close</button>
                 </div>
             </div>
-            <div id="connecting-modal" class="popup">
-                <div id="connecting-header" class="popup-header">
-                    <b>Connecting</b>
-                </div>
-                <div id="connecting-errors" class="error-box">
-                    <p id="connecting-error-message"></p>
-                </div>
-                <div id="connecting-fields" class="popup-fields">
-                    <p>Connecting to server. Please wait.</p>
-                </div>
+        </div>
+        <div id="connecting-modal" class="popup">
+            <div id="connecting-header" class="popup-header">
+                <b>Connecting</b>
             </div>
-            <div id="waiting-popup" class="popup">
-                <div id="waiting-header" class="popup-header">
-                    <b>Waiting...</b>
-                </div>
-                <div class="popup-contents">
-                    <p id="waiting-for"></p>
-                </div>
-                <div id="waiting-actions" class="popup-actions">
-                    <button id="close-waiting-button" onclick="closePopups(event)">Close</button>
-                </div>
+            <div id="connecting-errors" class="error-box">
+                <p id="connecting-error-message"></p>
             </div>
-            <div id="search-popup" class="popup">
-                <div id="search-header" class="popup-header">
-                    <b>Search</b>
+            <div id="connecting-fields" class="popup-fields">
+                <p>Connecting to server. Please wait.</p>
+            </div>
+        </div>
+        <div id="waiting-popup" class="popup">
+            <div id="waiting-header" class="popup-header">
+                <b>Waiting...</b>
+            </div>
+            <div class="popup-contents">
+                <p id="waiting-for"></p>
+            </div>
+            <div id="waiting-actions" class="popup-actions">
+                <button id="close-waiting-button" onclick="closePopups(event)">Close</button>
+            </div>
+        </div>
+        <div id="search-popup" class="popup">
+            <div id="search-header" class="popup-header">
+                <b>Search</b>
+            </div>
+            <div class="popup-contents">
+                <div class="error-box" id="search-errors">
+                    <p id="search-error-message"></p>
                 </div>
-                <div class="popup-contents">
-                    <div class="error-box" id="search-errors">
-                        <p id="search-error-message"></p>
-                    </div>
-                    <div id="search-fields" class="popup-fields">
-                        <input type="hidden" value="" id="selected-definition">
-                        <table id="search-table" width="100%">
-                            <thead>
-                                <tr id="search-header-row">
-                                    <th>Author</th>
-                                    <th>Name</th>
-                                    <th>Description</th>
-                                    <th>Last Modified</th>
-                                </tr>
-                                <tr id="search-filter-row">
-                                    <td>
-                                        <div class="filter-wrapper">
-                                            <input type="text" id="search-by-author" placeholder="Author Name"
-                                                   onchange="filterDefinitions(event)">
-                                        </div>
-                                    </td>
-                                    <td>
-                                        <div class="filter-wrapper">
-                                            <input type="text" id="search-by-name" onchange="filterDefinitions(event)"
-                                                   placeholder="Definition Name">
-                                        </div>
-                                    </td>
-                                    <td>
-                                        <div class="filter-wrapper">
-                                            <input type="text" id="search-by-description"
-                                                   onchange="filterDefinitions(event)" placeholder="Description Phrase">
-                                        </div>
-                                    </td>
-                                    <td></td>
-                                </tr>
-                            </thead>
-                            <tbody id="search-table-body">
+                <div id="search-fields" class="popup-fields">
+                    <input type="hidden" value="" id="selected-definition">
+                    <table id="search-table" width="100%">
+                        <thead>
+                            <tr id="search-header-row">
+                                <th>Author</th>
+                                <th>Name</th>
+                                <th>Description</th>
+                                <th>Last Modified</th>
+                            </tr>
+                            <tr id="search-filter-row">
+                                <td>
+                                    <div class="filter-wrapper">
+                                        <input type="text" id="search-by-author" placeholder="Author Name"
+                                            onchange="filterDefinitions(event)">
+                                    </div>
+                                </td>
+                                <td>
+                                    <div class="filter-wrapper">
+                                        <input type="text" id="search-by-name" onchange="filterDefinitions(event)"
+                                            placeholder="Definition Name">
+                                    </div>
+                                </td>
+                                <td>
+                                    <div class="filter-wrapper">
+                                        <input type="text" id="search-by-description"
+                                            onchange="filterDefinitions(event)" placeholder="Description Phrase">
+                                    </div>
+                                </td>
+                                <td></td>
+                            </tr>
+                        </thead>
+                        <tbody id="search-table-body">
 
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-                <div id="search-actions" class="popup-actions">
-                    <button id="select-search-button" onclick="selectPreexistingDefinition(event)" disabled>
-                        Select
-                    </button>
-                    <button id="close-search-button" onclick="closePopups(event)">Close</button>
+                        </tbody>
+                    </table>
                 </div>
             </div>
-            <div id="digest-modal" class="popup">
-                <div id="digest-header" class="popup-header">
-                    <b>Get Digest</b>
+            <div id="search-actions" class="popup-actions">
+                <button id="select-search-button" onclick="selectPreexistingDefinition(event)" disabled>
+                    Select
+                </button>
+                <button id="close-search-button" onclick="closePopups(event)">Close</button>
+            </div>
+        </div>
+        <div id="digest-modal" class="popup">
+            <div id="digest-header" class="popup-header">
+                <b>Get Digest</b>
+            </div>
+            <div class="popup-contents">
+                <div id="digest-errors" class="error-box">
+                    <p id="digest-error-message"></p>
                 </div>
-                <div class="popup-contents">
-                    <div id="digest-errors" class="error-box">
-                        <p id="digest-error-message"></p>
+                <div id="digest-fields" class="popup-fields">
+                    <span id="digest-explanation" class="popup-field-explanation">
+                        Select what events to save
+                    </span>
+                    <div id="digest-event-selectors">
                     </div>
-                    <div id="digest-fields" class="popup-fields">
-                        <span id="digest-explanation" class="popup-field-explanation">
-                            Select what events to save
-                        </span>
-                        <div id="digest-event-selectors">
-                        </div>
-                    </div>
-                    <div id="digest-actions" class="popup-actions">
-                        <button id="download-digest-button" onclick="getDigest(event)">Download</button>
-                        <button id="close-digest-popup-button" onclick="closePopups(event)">Close</button>
-                    </div>
+                </div>
+                <div id="digest-actions" class="popup-actions">
+                    <button id="download-digest-button" onclick="getDigest(event)">Download</button>
+                    <button id="close-digest-popup-button" onclick="closePopups(event)">Close</button>
                 </div>
             </div>
         </div>
     </div>
+</div>
 {% endblock content %}
