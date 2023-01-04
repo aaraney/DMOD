@@ -1,6 +1,7 @@
 from abc import ABC
 from enum import Enum
 from typing import Type
+from pydantic import BaseModel
 
 from dmod.core.serializable import Serializable, ResultIndicator
 
@@ -55,12 +56,12 @@ class InitRequestResponseReason(Enum):
     """The reason for the particular response is unknown or not well defined in the enum type."""
 
 
-class Message(Serializable, ABC):
+class Message(BaseModel, Serializable, ABC):
     """
     Class representing communication message of some kind between parts of the NWM MaaS system.
     """
 
-    event_type: MessageEventType = None
+    event_type: MessageEventType = MessageEventType.INVALID
     """ :class:`MessageEventType`: the event type for this message implementation """
 
     @classmethod
