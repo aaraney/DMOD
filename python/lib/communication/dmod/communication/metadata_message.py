@@ -1,10 +1,11 @@
 from .message import AbstractInitRequest, MessageEventType, Response
 from enum import Enum
 from numbers import Number
-from typing import Dict, Optional, Union
+from pydantic import Field, root_validator
+from typing import ClassVar, Dict, Optional, Union
+from .mixins import EnumValidateByNameMixIn
 
-
-class MetadataPurpose(Enum):
+class MetadataPurpose(EnumValidateByNameMixIn, Enum):
     CONNECT = 1,
     """ The metadata relates to the opening of a connection. """
     DISCONNECT = 2,
@@ -29,14 +30,30 @@ class MetadataMessage(AbstractInitRequest):
 
     event_type: MessageEventType = MessageEventType.METADATA
 
-    _purpose_serial_key = 'purpose'
-    _description_serial_key = 'description'
-    _metadata_follows_serial_key = 'additional_metadata'
-    _config_changes_serial_key = 'config_changes'
-    _config_change_dict_type_key = 'config_value_dict_type'
+    purpose: MetadataPurpose
+    description: Optional[str]
+    metadata_follows: Optional[bool] = Field(False, alias="additional_metadata")
+    config_changes: Optional[Dict[str, Union[None, str, bool, int, float, dict, list]]]
+
+    @root_validator()
+    def validate_purpose(cls, values):
+        if values["purpose"] == MetadataPurpose.CHANGE_CONFIG and not values["config_changes"]:
+            raise RuntimeError('Invalid {} initialization, setting {} to {} but without any config changes.'.format(
+                cls.__class__, values["purpose"].__class__, values["purpose"].name))
+
+    # _purpose_serial_key = 'purpose'
+    # _description_serial_key = 'description'
+    # _metadata_follows_serial_key = 'additional_metadata'
+    # _config_changes_serial_key = 'config_changes'
+    # _config_change_dict_type_key = 'config_value_dict_type'
 
     @classmethod
     def factory_init_from_deserialized_json(cls, json_obj: dict) -> Optional['MetadataMessage']:
+        try:
+            return cls(**json_obj)
+        except:
+            return None
+
         if cls._purpose_serial_key not in json_obj:
             return None
         purpose = MetadataPurpose.get_value_for_name(json_obj[cls._purpose_serial_key])
@@ -68,68 +85,69 @@ class MetadataMessage(AbstractInitRequest):
         """
         return cls._config_change_dict_type_key
 
-    def __init__(self, purpose: MetadataPurpose, description: Optional[str] = None, metadata_follows: bool = False,
-                 config_changes: Optional[Dict[str, Union[None, str, bool, Number, dict, list]]] = None):
-        self._purpose = purpose
-        self._description = description
-        self._metadata_follows = metadata_follows
-        self._config_changes = config_changes
-        if self._purpose == MetadataPurpose.CHANGE_CONFIG and not self._config_changes:
-            raise RuntimeError('Invalid {} initialization, setting {} to {} but without any config changes.'.format(
-                self.__class__, self._purpose.__class__, self._purpose.name))
+    # def __init__(self, purpose: MetadataPurpose, description: Optional[str] = None, metadata_follows: bool = False,
+    #              config_changes: Optional[Dict[str, Union[None, str, bool, Number, dict, list]]] = None):
+    #     self._purpose = purpose
+    #     self._description = description
+    #     self._metadata_follows = metadata_follows
+    #     self._config_changes = config_changes
+    #     if self._purpose == MetadataPurpose.CHANGE_CONFIG and not self._config_changes:
+    #         raise RuntimeError('Invalid {} initialization, setting {} to {} but without any config changes.'.format(
+    #             self.__class__, self._purpose.__class__, self._purpose.name))
 
-    @property
-    def config_changes(self) -> Optional[Dict[str, Union[None, str, bool, Number, dict, list]]]:
-        """
-        A dictionary, keyed by strings, representing some configurable setting(s) that need their value(s) changed.
+    # @property
+    # def config_changes(self) -> Optional[Dict[str, Union[None, str, bool, Number, dict, list]]]:
+    #     """
+    #     A dictionary, keyed by strings, representing some configurable setting(s) that need their value(s) changed.
 
-        This will mainly be applicable when the purpose property is ``CHANGE_CONFIG``, and frequently can otherwise be
-        left to/expected to be ``None``.  However, it should not be ``None`` when the purpose is ``CHANGE_CONFIG``.
+    #     This will mainly be applicable when the purpose property is ``CHANGE_CONFIG``, and frequently can otherwise be
+    #     left to/expected to be ``None``.  However, it should not be ``None`` when the purpose is ``CHANGE_CONFIG``.
 
-        Note that the main dictionary can contain nested dictionaries also.  These should essentially be the serialized
-        representations of ::class:`Serializable` object.  While the type hinting does not explicitly note this due to
-        the recursive nature of the definition, nested dictionaries at any depth should have string keys and values of
-        one of the types allowed for values in the top-level dictionary.
+    #     Note that the main dictionary can contain nested dictionaries also.  These should essentially be the serialized
+    #     representations of ::class:`Serializable` object.  While the type hinting does not explicitly note this due to
+    #     the recursive nature of the definition, nested dictionaries at any depth should have string keys and values of
+    #     one of the types allowed for values in the top-level dictionary.
 
-        It is recommended that an additional value be added to such nested dictionaries, under the key returned by
-        ::method:`get_config_change_dict_type_key`.  This should be the string representation of the class type of the
-        nested, serialized object.
+    #     It is recommended that an additional value be added to such nested dictionaries, under the key returned by
+    #     ::method:`get_config_change_dict_type_key`.  This should be the string representation of the class type of the
+    #     nested, serialized object.
 
-        Returns
-        -------
-        Optional[Dict[str, Union[None, str, bool, Number, dict]]]
-            A dictionary, keyed by strings, representing some configurable setting(s) that need their value(s) changed.
-        """
-        # This should get handled in __init__ but put here anyway
-        if self._purpose == MetadataPurpose.CHANGE_CONFIG and not self._config_changes:
-            raise RuntimeError('Invalid {} initialization, setting {} to {} but without any config changes.'.format(
-                self.__class__, self._purpose.__class__, self._purpose.name))
-        return self._config_changes
+    #     Returns
+    #     -------
+    #     Optional[Dict[str, Union[None, str, bool, Number, dict]]]
+    #         A dictionary, keyed by strings, representing some configurable setting(s) that need their value(s) changed.
+    #     """
+    #     # This should get handled in __init__ but put here anyway
+    #     if self._purpose == MetadataPurpose.CHANGE_CONFIG and not self._config_changes:
+    #         raise RuntimeError('Invalid {} initialization, setting {} to {} but without any config changes.'.format(
+    #             self.__class__, self._purpose.__class__, self._purpose.name))
+    #     return self._config_changes
 
-    @property
-    def description(self) -> Optional[str]:
-        return self._description
+    # @property
+    # def description(self) -> Optional[str]:
+    #     return self._description
 
-    @property
-    def metadata_follows(self) -> bool:
-        """
-        An indication of whether there is more metadata the sender needs to communicate beyond what is contained in this
-        message, thus letting the receiver know whether it should continue receiving after sending the response to this.
+    # @property
+    # def metadata_follows(self) -> bool:
+    #     """
+    #     An indication of whether there is more metadata the sender needs to communicate beyond what is contained in this
+    #     message, thus letting the receiver know whether it should continue receiving after sending the response to this.
 
-        Returns
-        -------
-        bool
-            An indication of whether there is more metadata the sender needs to communicate beyond what is contained in
-            this message, thus letting the receiver know whether it should continue receiving after sending the response
-            to this.
-        """
-        return self._metadata_follows
+    #     Returns
+    #     -------
+    #     bool
+    #         An indication of whether there is more metadata the sender needs to communicate beyond what is contained in
+    #         this message, thus letting the receiver know whether it should continue receiving after sending the response
+    #         to this.
+    #     """
+    #     return self._metadata_follows
 
-    @property
-    def purpose(self) -> MetadataPurpose:
-        return self._purpose
+    # @property
+    # def purpose(self) -> MetadataPurpose:
+    #     return self._purpose
 
     def to_dict(self) -> dict:
+        return self.dict(exclude_unset=True, by_alias=True)
         result = {self._purpose_serial_key: self.purpose.name, self._metadata_follows_serial_key: self.metadata_follows}
         if self.description:
             result[self._description_serial_key] = self.description
@@ -137,15 +155,20 @@ class MetadataMessage(AbstractInitRequest):
             result[self._config_changes_serial_key] = self.config_changes
         return result
 
+    def to_json(self) -> str:
+        return self.json(exclude_unset=True, by_alias=True)
+
 
 class MetadataResponse(Response):
     """
     The subtype of ::class:`Response` appropriate for ::class:`MetadataMessage` objects.
     """
 
-    _metadata_follows_serial_key = MetadataMessage._metadata_follows_serial_key
-    _purpose_serial_key = MetadataMessage._purpose_serial_key
-    response_to_type = MetadataMessage
+    # _metadata_follows_serial_key = MetadataMessage._metadata_follows_serial_key
+    # _purpose_serial_key = MetadataMessage._purpose_serial_key
+    _metadata_follows_serial_key = MetadataMessage.__fields__["metadata_follows"].alias
+    _purpose_serial_key = MetadataMessage.__fields__["purpose"].alias
+    response_to_type: ClassVar = MetadataMessage
 
     @classmethod
     def factory_create(cls, success: bool, reason: str, purpose: MetadataPurpose, expect_more: bool, message: str = ''):
