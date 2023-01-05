@@ -1,13 +1,14 @@
 from abc import ABC
 from enum import Enum
-from typing import Type
+from typing import Type, ClassVar
 from pydantic import BaseModel
 
 from dmod.core.serializable import Serializable, ResultIndicator
+from .mixins import EnumValidateByNameMixIn
 
 
 #FIXME make an independent enum of model request types???
-class MessageEventType(Enum):
+class MessageEventType(EnumValidateByNameMixIn, Enum):
     SESSION_INIT = 1
 
     MODEL_EXEC_REQUEST = 2
@@ -91,9 +92,6 @@ class AbstractInitRequest(Message, ABC):
     interactions.
     """
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
 
 class Response(ResultIndicator, Message, ABC):
     """
@@ -123,7 +121,7 @@ class Response(ResultIndicator, Message, ABC):
 
     """
 
-    response_to_type = AbstractInitRequest
+    response_to_type: ClassVar = AbstractInitRequest
     """ The type of :class:`AbstractInitRequest` for which this type is the response"""
 
     @classmethod
@@ -266,7 +264,7 @@ class InvalidMessage(AbstractInitRequest):
 
 class InvalidMessageResponse(Response):
 
-    response_to_type = InvalidMessage
+    response_to_type: ClassVar = InvalidMessage
     """ The type of :class:`AbstractInitRequest` for which this type is the response"""
 
     def __init__(self, data=None):
