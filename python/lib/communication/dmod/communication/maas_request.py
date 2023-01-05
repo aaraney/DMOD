@@ -9,7 +9,8 @@ from dmod.core.meta_data import DataCategory, DataDomain, DataFormat, DiscreteRe
 from .message import AbstractInitRequest, MessageEventType, Response, InitRequestResponseReason
 from abc import ABC, abstractmethod
 from numbers import Number
-from typing import Dict, List, Optional, Set, Union
+from typing import Dict, List, Literal, Optional, Set, Union
+from pydantic import BaseModel, Field
 
 
 def get_available_models() -> dict:
@@ -48,18 +49,20 @@ def get_distribution_types() -> set:
     return all_types
 
 
-class Scalar(object):
+class Scalar(BaseModel):
     """
     Represents a parameter value that is bound to a single number
     """
-    def __init__(self, scalar: int):
-        """
-        :param int scalar: The value for the parameter
-        """
-        self.scalar = scalar
+    scalar: int
+    # def __init__(self, scalar: int):
+    #     """
+    #     :param int scalar: The value for the parameter
+    #     """
+    #     self.scalar = scalar
 
     def to_dict(self):
-        return {'scalar': self.scalar}
+        return self.dict()
+        # return {'scalar': self.scalar}
 
     def __str__(self):
         return str(self.scalar)
@@ -68,22 +71,29 @@ class Scalar(object):
         return self.__str__()
 
 
-class Distribution(object):
+class DistributionBounds(BaseModel):
+    minimum: int
+    maximum: int
+    distribution_type: Optional[Literal["normal"]] = Field("normal")
+
+
+class Distribution(BaseModel):
     """
     Represents the definition of a distribution of numbers
     """
-    def __init__(self, minimum: int = 0, maximum: int = 0, distribution_type: str = 'normal'):
-        """
-        :param int minimum: The lower bound for the distribution
-        :param int maximum: The upper bound of the distribution
-        :param str distribution_type: The type of the distribution
-        """
-        self.minimum = minimum
-        self.maximum = maximum
-        self.distribution_type = distribution_type
+    distribution: DistributionBounds
+    # def __init__(self, minimum: int = 0, maximum: int = 0, distribution_type: str = 'normal'):
+    #     """
+    #     :param int minimum: The lower bound for the distribution
+    #     :param int maximum: The upper bound of the distribution
+    #     :param str distribution_type: The type of the distribution
+    #     """
+    #     self.minimum = minimum
+    #     self.maximum = maximum
+    #     self.distribution_type = distribution_type
 
     def to_dict(self):
-        return {'distribution': {'min': self.minimum, 'max': self.maximum, 'type': self.distribution_type}}
+        return self.dict()
 
     def __str__(self):
         return str(self.to_dict())
@@ -201,7 +211,7 @@ class ModelExecRequest(ExternalRequest, DmodJobRequest, ABC):
 
     event_type: MessageEventType = MessageEventType.MODEL_EXEC_REQUEST
 
-    model_name = None
+    model_name: Optional[str] # = None
     """(:class:`str`) The name of the model to be used"""
 
     _DEFAULT_CPU_COUNT = 1
