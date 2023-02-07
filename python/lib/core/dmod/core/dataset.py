@@ -205,10 +205,8 @@ class Dataset(Serializable):
         if not self.is_temporary:
             return False
         elif isinstance(value, timedelta):
-            # TODO: Fix bug. expires could be None
             self._set_expires(self.expires + value)
             return True
-            # TODO: Fix bug. expires could be None
         elif isinstance(value, datetime) and self.expires < value:
             self._set_expires(value)
             return True
