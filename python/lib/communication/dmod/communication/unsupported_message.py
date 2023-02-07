@@ -4,12 +4,28 @@ from typing import Type
 
 
 class UnsupportedMessageTypeResponse(Response):
+    actual_event_type: MessageEventType
+    listener_type: Type[WebSocketInterface]
+    message: str
 
-    def __init__(self, actual_event_type: MessageEventType, listener_type: Type[WebSocketInterface],
-                 message: str = None, data=None):
+    success = False
+    reason = "Message Event Type Unsupported"
+
+    def __init__(
+        self,
+        actual_event_type: MessageEventType,
+        listener_type: Type[WebSocketInterface],
+        message: str = None,
+        data=None,
+        **kwargs
+    ):
         if message is None:
-            message = 'The {} event type is not supported by this {} listener'.format(
-                actual_event_type, listener_type.__name__)
-        super().__init__(success=False, reason='Message Event Type Unsupported', message=message, data=data)
-        self.actual_event_type = actual_event_type
-        self.listener_type = listener_type
+            message = "The {} event type is not supported by this {} listener".format(
+                actual_event_type, listener_type.__name__
+            )
+        super().__init__(
+            message=message,
+            data=data,
+            actual_event_type=actual_event_type,
+            listener_type=listener_type,
+        )

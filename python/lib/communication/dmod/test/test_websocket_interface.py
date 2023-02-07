@@ -7,8 +7,9 @@ import ssl
 import sys
 import unittest
 from ..communication.message import MessageEventType
-from dmod.communication import ModelExecRequest, SessionInitMessage
-from dmod.communication.dataset_management_message import MaaSDatasetManagementMessage
+from ..communication.maas_request import ModelExecRequest
+from ..communication.session import SessionInitMessage
+from ..communication.dataset_management_message import MaaSDatasetManagementMessage
 from ..communication.websocket_interface import NoOpHandler
 from pathlib import Path
 from socket import gethostname
@@ -155,7 +156,10 @@ class TestWebSocketInterface(WebSocketInterfaceTestBase):
                     "allocation_paradigm": "ROUND_ROBIN",
                     "config_data_id": "1",
                     "cpu_count": 2,
-                    "data_requirements": [{"domain": {"data_format": "NWM_CONFIG", "continuous": [],
+                    "data_requirements": [{
+                        "category": "CONFIG",
+                        "is_input": True,
+                        "domain": {"data_format": "NWM_CONFIG", "continuous": [],
                                                       "discrete": [{"variable": "data_id", "values": ["1"]}]}}]
                 }
             },

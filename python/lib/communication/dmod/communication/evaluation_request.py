@@ -3,9 +3,9 @@ import abc
 import json
 
 from numbers import Number
-from typing import Dict
-from typing import Union
+from pydantic import Field, validator
 
+from dmod.core.serializable import Serializable
 from .message import Message, MessageEventType, Response
 
 SERIALIZABLE_DICT = typing.Dict[str, typing.Union[str, Number, dict, typing.List]]
@@ -16,35 +16,32 @@ class EvaluationRequest(Message, abc.ABC):
     A request to be forwarded to the evaluation service
     """
 
-    event_type: MessageEventType = MessageEventType.EVALUATION_REQUEST
+    event_type: typing.ClassVar[MessageEventType] = MessageEventType.EVALUATION_REQUEST
     """ :class:`MessageEventType`: the event type for this message implementation """
+
+    action: str
 
     @classmethod
     @abc.abstractmethod
     def get_action(cls) -> str:
         ...
 
-    @property
-    def action(self) -> str:
-        return self.get_action()
-
 
 class EvaluationConnectionRequest(EvaluationRequest):
     """
     A request used to communicate through a chained websocket connection
     """
-    _action_parameters: typing.Dict[str, typing.Any]
+    action: typing.Literal["connect"] = "connect"
+    parameters: typing.Dict[str, typing.Any] = Field(default_factory=dict)
 
-    def __init__(self, **kwargs):
-        self._action_parameters = kwargs or dict()
+    class Config:
+        fields = {
+            "parameters": {"alias": "action_parameters"}
+            }
 
     @classmethod
     def get_action(cls) -> str:
-        return "connect"
-
-    @property
-    def parameters(self) -> typing.Dict[str, typing.Any]:
-        return self._action_parameters
+        return cls.__fields__["action"].default
 
     @classmethod
     def factory_init_from_deserialized_json(cls, json_obj: dict) -> typing.Optional[EvaluationRequest]:
@@ -64,20 +61,6 @@ class EvaluationConnectionRequest(EvaluationRequest):
 
         return cls(**json_obj)
 
-    def to_dict(self) -> Dict[str, Union[str, Number, dict, list]]:
-        """
-        Returns:
-            A dictionary representation of this request
-        """
-        dictionary_representation = {
-            "action": self.action
-        }
-
-        if self._action_parameters:
-            dictionary_representation['action_parameters'] = self._action_parameters.copy()
-
-        return dictionary_representation
-
 
 class EvaluationConnectionRequestResponse(Response):
     pass
@@ -86,64 +69,64 @@ class EvaluationConnectionRequestResponse(Response):
 class SaveEvaluationRequest(EvaluationRequest):
     pass
 
+class ActionParameters(Serializable):
+    evaluation_name: str
+    instructions: str
+
+    @validator("instructions", pre=True)
+    def _coerce_instructions(cls, value):
+        if isinstance(value, dict):
+            return json.dumps(value, indent=4)
+        return value
+
 
 class StartEvaluationRequest(EvaluationRequest):
+    action: typing.Literal["launch"] = "launch"
+    parameters: typing.Dict[str, typing.Any]
+
+    class Config:
+        fields = {
+            "parameters": {"alias": "action_parameters"}
+            }
+
+    # Note: `parameters` is a dictionary representation of `ActionParameters` plus arbitrary keys
+    # and values
+    @validator("parameters", pre=True)
+    def _coerce_action_parameters(cls, value: typing.Union[typing.Dict[str, typing.Any], ActionParameters]):
+        if isinstance(value, ActionParameters):
+            return value.to_dict()
+
+        parameters = ActionParameters(**value)
+        return {**value, **parameters.to_dict()}
+
     @classmethod
     def get_action(cls) -> str:
-        return "launch"
-
-    evaluation_name: str = None
-
-    instructions: typing.Union[str, dict] = None
-
-    action_parameters: dict = None
+        return cls.__fields__["action"].default
 
     @classmethod
     def factory_init_from_deserialized_json(cls, json_obj: dict) -> typing.Optional[EvaluationRequest]:
         try:
-            if "action" in json_obj and json_obj['action'] != cls.get_action():
+            if "action" in json_obj and json_obj["action"] != cls.get_action():
                 return None
 
-            if "action_parameters" in json_obj:
-                parameters = json_obj['action_parameters']
-            else:
-                parameters = json_obj
-
-            missing_instructions = not parameters.get("instructions") \
-                                   or not isinstance(parameters.get("instructions"), (str, dict))
-            missing_name = not parameters.get("evaluation_name")
-
-            if missing_instructions or missing_name:
-                return None
-
-            return cls(
-                instructions=parameters.get("instructions"),
-                evaluation_name=parameters.get("evaluation_name"),
-                **parameters
-            )
-        except Exception as e:
+            return cls(**json_obj)
+        except Exception:
             return None
-
-    def to_dict(self) -> SERIALIZABLE_DICT:
-        return {
-            "action": self.action,
-            "action_parameters": self.action_parameters.update(
-                {
-                    "evaluation_name": self.evaluation_name,
-                    "instructions": self.instructions
-                }
-            )
-        }
 
     def __init__(
         self,
-        instructions: str,
-        evaluation_name: str,
+        # NOTE: None for backwards compatibility
+        instructions: str = None,
+        evaluation_name: str = None,
         **kwargs
     ):
-        self._instructions = json.dumps(instructions, indent=4) if isinstance(instructions, dict) else instructions
-        self._evaluation_name = evaluation_name
-        self._action_parameters = kwargs
+        # assume no need for backwards compatibility
+        if instructions is None or evaluation_name is None:
+            super().__init__(**kwargs)
+            return
+
+        parameters = ActionParameters(instructions=instructions, evaluation_name=evaluation_name, **kwargs)
+        super().__init__(parameters=parameters.to_dict())
 
 
 class FindEvaluationRequest(EvaluationRequest):

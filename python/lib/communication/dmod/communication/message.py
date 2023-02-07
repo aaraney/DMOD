@@ -1,12 +1,13 @@
 from abc import ABC
-from enum import Enum
-from typing import Type
+from typing import Any, ClassVar, Dict, Literal, Optional, Type
+from pydantic import Field
 
 from dmod.core.serializable import Serializable, ResultIndicator
+from dmod.core.enum import PydanticEnum
 
 
 #FIXME make an independent enum of model request types???
-class MessageEventType(Enum):
+class MessageEventType(PydanticEnum):
     SESSION_INIT = 1
 
     MODEL_EXEC_REQUEST = 2
@@ -36,7 +37,7 @@ class MessageEventType(Enum):
     INVALID = -1
 
 
-class InitRequestResponseReason(Enum):
+class InitRequestResponseReason(PydanticEnum):
     """
     Values for the ``reason`` attribute in responses to ``AbstractInitRequest`` messages.
     """
@@ -62,7 +63,7 @@ class Message(Serializable, ABC):
     Class representing communication message of some kind between parts of the NWM MaaS system.
     """
 
-    event_type: MessageEventType = None
+    event_type: ClassVar[MessageEventType] = MessageEventType.INVALID
     """ :class:`MessageEventType`: the event type for this message implementation """
 
     @classmethod
@@ -77,9 +78,6 @@ class Message(Serializable, ABC):
         """
         return cls.event_type
 
-    def __init__(self, *args, **kwargs):
-        pass
-
 
 class AbstractInitRequest(Message, ABC):
     """
@@ -91,9 +89,6 @@ class AbstractInitRequest(Message, ABC):
     serial send-reply nature of the particular interaction involved, and that instances of this type start such
     interactions.
     """
-
-    def __int__(self, *args, **kwargs):
-        super(AbstractInitRequest, self).__int__(*args, **kwargs)
 
 
 class Response(ResultIndicator, Message, ABC):
@@ -124,65 +119,10 @@ class Response(ResultIndicator, Message, ABC):
 
     """
 
-    response_to_type = AbstractInitRequest
+    response_to_type: ClassVar[Type[AbstractInitRequest]] = AbstractInitRequest
     """ The type of :class:`AbstractInitRequest` for which this type is the response"""
 
-    @classmethod
-    def _factory_init_data_attribute(cls, json_obj: dict):
-        """
-        Initialize the argument value for a constructor param used to set the :attr:`data` attribute appropriate for
-        this type, given the parent JSON object, which may mean simply returning the value or may mean deserializing the
-        value to some object type, depending on the implementation.
-
-        The intent is for this to be used by :meth:`factory_init_from_deserialized_json`, where initialization logic for
-        the value to be set as :attr:`data` from the provided param may vary depending on the particular class.
-
-        In the default implementation, the value found at the 'data' key is simply directly returned, or None is
-        returned if the 'data' key is not found.
-
-        Parameters
-        ----------
-        json_obj : dict
-            the parent JSON object containing the desired data value under the 'data' key
-
-        Returns
-        -------
-        data : dict
-            the resulting data value object
-
-        See Also
-        -------
-        factory_init_from_deserialized_json
-        """
-        try:
-            return json_obj['data']
-        except Exception as e:
-            return None
-
-    @classmethod
-    def factory_init_from_deserialized_json(cls, json_obj: dict):
-        """
-        Factory create a new instance of this type based on a JSON object dictionary deserialized from received JSON.
-
-        Parameters
-        ----------
-        json_obj
-
-        Returns
-        -------
-        response_obj : Response
-            A new object of this type instantiated from the deserialize JSON object dictionary, or none if the provided
-            parameter could not be used to instantiated a new object.
-
-        See Also
-        -------
-        _factory_init_data_attribute
-        """
-        try:
-            return cls(success=json_obj['success'], reason=json_obj['reason'], message=json_obj['message'],
-                       data=cls._factory_init_data_attribute(json_obj))
-        except Exception as e:
-            return None
+    data: Optional[Serializable]
 
     @classmethod
     def get_message_event_type(cls) -> MessageEventType:
@@ -211,24 +151,6 @@ class Response(ResultIndicator, Message, ABC):
         """
         return cls.response_to_type
 
-    def __init__(self, data=None, *args, **kwargs):
-        super(Response, self).__init__(*args, **kwargs)
-        self.data = data
-
-    def __eq__(self, other):
-        return self.success == other.success and self.reason == other.reason and self.message == other.message \
-               and self.data == other.data
-
-    def to_dict(self) -> dict:
-        serial = super(Response, self).to_dict()
-        if self.data is None:
-            serial['data'] = {}
-        elif isinstance(self.data, dict):
-            serial['data'] = self.data
-        else:
-            serial['data'] = self.data.to_dict()
-        return serial
-
 
 class InvalidMessage(AbstractInitRequest):
     """
@@ -236,58 +158,40 @@ class InvalidMessage(AbstractInitRequest):
     type.
     """
 
-    event_type: MessageEventType = MessageEventType.INVALID
+    event_type: ClassVar[MessageEventType] = MessageEventType.INVALID
     """ :class:`MessageEventType`: the type of ``MessageEventType`` for which this message is applicable. """
 
-    @classmethod
-    def factory_init_from_deserialized_json(cls, json_obj: dict):
-        """
-        Factory create a new instance of this type based on a JSON object dictionary deserialized from received JSON.
-
-        Parameters
-        ----------
-        json_obj
-
-        Returns
-        -------
-        A new object of this type instantiated from the deserialize JSON object dictionary, or none if the provided
-        parameter could not be used to instantiated a new object.
-        """
-        try:
-            return cls(content=json_obj['content'])
-        except:
-            return None
-
-    def __init__(self, content: dict):
-        self.content = content
-
-    def to_dict(self) -> dict:
-        return {'content': self.content}
+    content: Dict[str, Any]
 
 
 class InvalidMessageResponse(Response):
 
-    response_to_type = InvalidMessage
+    response_to_type: ClassVar[Type[AbstractInitRequest]] = InvalidMessage
     """ The type of :class:`AbstractInitRequest` for which this type is the response"""
 
-    def __init__(self, data=None):
-        super().__init__(success=False,
-                         reason='Invalid Request Message',
-                         message='Request message was not formatted as any known valid type',
-                         data=data)
+    success = False
+    reason: Literal["Invalid Request message"] = "Invalid Request message"
+    message: Literal["Request message was not formatted as any known valid type"] = "Request message was not formatted as any known valid type"
+    data: Optional[Serializable]
 
+    def __init__(self, data: Optional[Serializable]=None, **kwargs):
+        super().__init__(data=data)
+
+
+class HttpCode(Serializable):
+    http_code: int = Field(ge=100, le=599)
 
 class ErrorResponse(Response):
     """
     A response to inform a client of an error that has occured within a request
     """
-    def __init__(self, message: str, http_code: int = None):
-        if not http_code:
-            http_code = 500
+    success = False
+    reason: Literal["Error"] = "Error"
+    data: HttpCode = Field(default_factory=lambda: HttpCode(http_code=500))
 
-        if not isinstance(http_code, int):
-            try:
-                http_code = int(float(http_code))
-            except:
-                http_code = str(http_code)
-        super().__init__(success=False, reason="Error", message=message, data={"http_code": http_code})
+    def __init__(self, message: str, http_code: int = None, **kwargs):
+        if http_code is None:
+            super().__init__(message=message)
+            return
+
+        super().__init__(message=message, data={"http_code": http_code})
