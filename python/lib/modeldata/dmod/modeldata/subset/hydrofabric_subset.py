@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from hypy import Catchment, Nexus
-from typing import Collection, Optional, Sequence, Set, Tuple, Union
+from typing import Collection, Optional, Set, Tuple
+from pydantic import PrivateAttr
 from ..hydrofabric import Hydrofabric
 from .subset_definition import SubsetDefinition
 
@@ -22,17 +23,19 @@ class HydrofabricSubset(SubsetDefinition, ABC):
     made in the case of invalid objects.  In such cases, the hash is equal to the super class hash output plus ``1``.
     """
 
-    __slots__ = ["_hydrofabric"]
+    hydrofabric: Hydrofabric
 
-    def __init__(self, catchment_ids: Collection[str], nexus_ids: Collection[str], hydrofabric: Hydrofabric):
-        super().__init__(catchment_ids=catchment_ids, nexus_ids=nexus_ids)
+    class Config:
+        arbitrary_types_allowed = True
+
+    def __init__(self, catchment_ids: Collection[str], nexus_ids: Collection[str], hydrofabric: Hydrofabric, **data):
+        super().__init__(catchment_ids=catchment_ids, nexus_ids=nexus_ids, hydrofabric=hydrofabric, **data)
         if not self.validate_hydrofabric(hydrofabric):
             raise RuntimeError("Insufficient or wrongly formatted hydrofabric when trying to create {} object".format(
                 self.__class__.__name__
             ))
-        self._hydrofabric = hydrofabric
 
-    def __eq__(self, other):
+    def __eq__(self, other: object):
         if isinstance(other, self.__class__):
             return self.validate_hydrofabric() == other.validate_hydrofabric() and super().__eq__(other)
         else:
@@ -46,7 +49,7 @@ class HydrofabricSubset(SubsetDefinition, ABC):
 
     @property
     @abstractmethod
-    def catchments(self) -> Tuple[Catchment]:
+    def catchments(self) -> Tuple[Catchment, ...]:
         """
         Get the associated catchments as ::class:`Catchment` objects.
 
@@ -59,7 +62,7 @@ class HydrofabricSubset(SubsetDefinition, ABC):
 
     @property
     @abstractmethod
-    def nexuses(self) -> Tuple[Nexus]:
+    def nexuses(self) -> Tuple[Nexus, ...]:
         """
         Get the associated nexuses as ::class:`Nexus` objects.
 
@@ -100,6 +103,9 @@ class SimpleHydrofabricSubset(HydrofabricSubset):
     Simple ::class:`HydrofabricSubset` type.
     """
 
+    _catchments: Set[Catchment] = PrivateAttr(default_factory=set)
+    _nexuses: Set[Nexus] = PrivateAttr(default_factory=set)
+
     @classmethod
     def factory_create_from_base_and_hydrofabric(cls, subset_def: SubsetDefinition, hydrofabric: Hydrofabric,
                                                  *args, **kwargs) \
@@ -127,17 +133,12 @@ class SimpleHydrofabricSubset(HydrofabricSubset):
         return cls(catchment_ids=subset_def.catchment_ids, nexus_ids=subset_def.nexus_ids, hydrofabric=hydrofabric,
                    *args, **kwargs)
 
-    __slots__ = ["_catchments", "_nexuses"]
-
-    def __init__(self, catchment_ids: Collection[str], nexus_ids: Collection[str], hydrofabric: Hydrofabric, *args,
-                 **kwargs):
-        self._catchments: Set[Catchment] = set()
-        self._nexuses: Set[Nexus] = set()
-        super().__init__(catchment_ids, nexus_ids, hydrofabric)
+    def __init__(self, catchment_ids: Collection[str], nexus_ids: Collection[str], hydrofabric: Hydrofabric, **data):
+        super().__init__(catchment_ids=catchment_ids, nexus_ids=nexus_ids, hydrofabric=hydrofabric, **data)
         # Since super __init__ validates, and validate function make sure ids are recognized, these won't ever be None
-        for cid in catchment_ids:
+        for cid in self.catchment_ids:
             self._catchments.add(hydrofabric.get_catchment_by_id(cid))
-        for nid in nexus_ids:
+        for nid in self.nexus_ids:
             self._nexuses.add(hydrofabric.get_nexus_by_id(nid))
 
     @property
@@ -147,19 +148,19 @@ class SimpleHydrofabricSubset(HydrofabricSubset):
 
         Returns
         -------
-        Tuple[Catchment]
+        Tuple[Catchment, ...]
             The associated catchments as ::class:`Catchment` objects.
         """
         return tuple(self._catchments)
 
     @property
-    def nexuses(self) -> Tuple[Nexus]:
+    def nexuses(self) -> Tuple[Nexus, ...]:
         """
         Get the associated nexuses as ::class:`Nexus` objects.
 
         Returns
         -------
-        Tuple[Catchment]
+        Tuple[Catchment, ...]
             The associated nexuses as ::class:`Nexus` objects.
         """
         return tuple(self._nexuses)
@@ -184,11 +185,11 @@ class SimpleHydrofabricSubset(HydrofabricSubset):
             otherwise.
         """
         if hydrofabric is None:
-            hydrofabric = self._hydrofabric
-        for cid in self._catchment_ids:
+            hydrofabric = self.hydrofabric
+        for cid in self.catchment_ids:
             if not hydrofabric.is_catchment_recognized(cid):
                 return False
-        for nid in self._nexus_ids:
+        for nid in self.nexus_ids:
             if not hydrofabric.is_nexus_recognized(nid):
                 return False
         return True
