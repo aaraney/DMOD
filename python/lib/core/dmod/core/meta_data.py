@@ -41,6 +41,7 @@ def _validate_variable_is_known(cls, variable: StandardDatasetIndex) -> Standard
         raise ValueError("Invalid value for {} variable: {}".format(cls.__name__, variable))
     return variable
 
+
 class DataFormat(PydanticEnum):
     """
     Supported data format types for data needed or produced by workflow execution tasks.
