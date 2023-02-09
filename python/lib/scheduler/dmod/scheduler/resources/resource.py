@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from typing import Any, Callable, Dict, Optional, Tuple, Type, Union
 from typing_extensions import Self
 from pydantic import Field, Extra, validator, root_validator
-from functools import cache
+from functools import lru_cache
 from warnings import warn
 
 
@@ -231,7 +231,7 @@ class Resource(SingleHostProcessingAssetPool):
         return values
 
     @classmethod
-    @cache
+    @lru_cache(maxsize=None)
     def _alias_field_map(cls) -> Dict[str, str]:
         """Mapping of lower cased alias names to cased alias names."""
         return {v.alias.lower(): v.alias for v in cls.__fields__.values()}

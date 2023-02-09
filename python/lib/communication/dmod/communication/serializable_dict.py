@@ -1,4 +1,4 @@
-from functools import cache
+from functools import lru_cache
 from typing import (
     Any,
     ClassVar,
@@ -194,7 +194,7 @@ class SerializableDict(Serializable):
         return self.__dict__.values()
 
 
-@cache
+@lru_cache(maxsize=None)
 def _validate_assignment(cls: Type[M]) -> bool:
     validate_assignment: bool = False
 
