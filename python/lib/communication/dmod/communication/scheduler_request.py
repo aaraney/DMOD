@@ -2,6 +2,7 @@ from dmod.core.execution import AllocationParadigm
 from .maas_request import ModelExecRequest
 from .message import AbstractInitRequest, MessageEventType, Response
 from .scheduler_request_response_body import SchedulerRequestResponseBody, UNSUCCESSFUL_JOB
+from .serializable_dict import SerializableDict
 from pydantic import Field, PrivateAttr, validator
 from typing import ClassVar, Dict, Optional, Type, Union
 
