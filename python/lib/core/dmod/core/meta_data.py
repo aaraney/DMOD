@@ -499,12 +499,52 @@ class DataDomain(Serializable):
 
     @root_validator()
     def validate_sufficient_restrictions(cls, values):
-        continuous_restrictions = values.get("continuous_restrictions", [])
-        discrete_restrictions = values.get("discrete_restrictions", [])
+        continuous_restrictions = values.get("continuous", [])
+        discrete_restrictions = values.get("discrete", [])
         if len(continuous_restrictions) + len(discrete_restrictions) == 0:
             msg = "Cannot create {} without at least one finite continuous or discrete restriction"
             raise RuntimeError(msg.format(cls.__name__))
         return values
+
+    @overload
+    def __init__(
+        self,
+        *,
+        data_format: DataFormat,
+        continuous: Optional[List[ContinuousRestriction]],
+        discrete: Optional[List[DiscreteRestriction]],
+        data_fields: Optional[Dict[str, Union[str, int, float, Any]]],
+        **data: Dict[str, Any]
+    ): ...
+
+    @overload
+    def __init__(
+        self,
+        data_format: DataFormat,
+        continuous_restrictions: Optional[List[ContinuousRestriction]] = None,
+        discrete_restrictions: Optional[List[DiscreteRestriction]] = None,
+        custom_data_fields: Optional[Dict[str, Type]] = None
+    ): ...
+
+    def __init__(
+        self,
+        data_format: DataFormat,
+        continuous_restrictions: Optional[List[ContinuousRestriction]] = None,
+        discrete_restrictions: Optional[List[DiscreteRestriction]] = None,
+        custom_data_fields: Optional[Dict[str, Type]] = None,
+        **data: Dict[str, Any]
+    ):
+        # assume fields provided by alias
+        if data:
+            super().__init__(data_format=data_format, **data)
+            return
+
+        super().__init__(
+            data_format=data_format,
+            continuous=continuous_restrictions,
+            discrete=discrete_restrictions,
+            custom_data_fields=custom_data_fields,
+        )
 
     @classmethod
     def factory_init_from_restriction_collections(cls, data_format: DataFormat, **kwargs) -> 'DataDomain':
