@@ -674,7 +674,7 @@ class DataDomain(Serializable):
             Map of the continuous restrictions defining this domain, keyed by variable name.
         """
         if self._continuous_restrictions is None:
-                self._continuous_restrictions = {k.variable: k for k in self.continuous} if self.continuous else {}
+            self._continuous_restrictions = {k.variable: k for k in self.continuous} if self.continuous else {}
         return self._continuous_restrictions
 
     @property
