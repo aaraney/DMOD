@@ -65,7 +65,7 @@ class SerializableDict(Serializable):
 
     def __delitem__(self, key: str):
         if key in self.__fields__:
-            raise KeyError(f"Deleting non-extra fields is forbidden.")
+            raise KeyError("Deleting non-extra fields is forbidden.")
 
         del self.__dict__[key]
 
@@ -109,7 +109,7 @@ class SerializableDict(Serializable):
 
     def pop(self, key: str, default: Any = __SENTINEL) -> Any:
         if key in self.__fields__:
-            raise KeyError(f"Deleting non-extra fields is forbidden.")
+            raise KeyError("Deleting non-extra fields is forbidden.")
 
         if default == self.__SENTINEL:
             return self.__dict__.pop(key)
@@ -121,7 +121,7 @@ class SerializableDict(Serializable):
 
         if key in self.__fields__:
             self[key] = value
-            raise KeyError(f"Deleting non-extra fields is forbidden.")
+            raise KeyError("Deleting non-extra fields is forbidden.")
 
         return key, value
 
