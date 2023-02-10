@@ -358,7 +358,7 @@ class ContinuousRestriction(Serializable):
         elif self.variable != other.variable:
             return False
         else:
-           return self.begin <= other.begin and self.end >= other.end
+            return self.begin <= other.begin and self.end >= other.end
 
 
 class DiscreteRestriction(Serializable):
